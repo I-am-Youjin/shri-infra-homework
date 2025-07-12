@@ -1,0 +1,49 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    env:
+      RELEASE_VERSION: ${{ github.run_number }}
+
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 22
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+
+      - name: Decode YC service key
+        run: echo "${{ secrets.YC_KEY_JSON }}" | base64 -d > key.json
+
+      - name: Configure Docker for Yandex Cloud
+        run: |
+          docker login --username json_key --password-stdin \
+            cr.yandex <<< "$(cat key.json)"
+
+      - name: Build Docker image
+        run: |
+          docker build -t cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ env.RELEASE_VERSION }} .
+          docker tag cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ env.RELEASE_VERSION }} \
+                     cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ env.RELEASE_VERSION }}_latest
+
+      - name: Push Docker image
+        run: |
+          docker push cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ env.RELEASE_VERSION }}
+          docker push cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ env.RELEASE_VERSION }}_latest
+
+      - name: Create Git tag
+        run: git tag v${{ env.RELEASE_VERSION }} && git push origin v${{ env.RELEASE_VERSION }}
+
+      - name: Create GitHub issue
+        uses: peter-evans/create-issue-from-file@v4
+        with:
+          title: Release v${{ env.RELEASE_VERSION }}
+          content-filepath: ./release_note.md
