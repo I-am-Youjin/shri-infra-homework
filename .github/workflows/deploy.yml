@@ -1,67 +1,56 @@
-name: Deploy with OAuth
+name: Deploy to VM
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to deploy"
+        description: "Docker image tag"
         required: true
-
-env:
-  REGISTRY: cr.yandex
-  REPO: ${{ secrets.YC_REGISTRY_ID }}/app
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: production
 
     steps:
-      - name: Get IAM Token via API
-        run: |
-          RESPONSE=$(curl -s -X POST \
-            -H "Content-Type: application/json" \
-            -d "{\"yandexPassportOauthToken\":\"${{ secrets.YC_OAUTH_TOKEN }}\"}" \
-            "https://iam.api.cloud.yandex.net/iam/v1/tokens")
-
-          YC_TOKEN=$(echo "$RESPONSE" | jq -r '.iamToken')
-          echo "::add-mask::$YC_TOKEN"
-          echo "YC_TOKEN=$YC_TOKEN" >> $GITHUB_ENV
-
-      - name: Login to Container Registry
-        run: |
-          echo "${{ env.YC_TOKEN }}" | docker login \
-            --username iam \
-            --password-stdin \
-            ${{ env.REGISTRY }}
-
-      - name: Verify image exists
-        run: |
-          docker pull ${{ env.REGISTRY }}/${{ env.REPO }}:${{ github.event.inputs.version }}
-
-      - name: Deploy to VM
-        uses: appleboy/ssh-action@v1
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.0
         with:
-          host: ${{ secrets.VM_IP }}
-          username: ${{ secrets.VM_SSH_USER }}
-          key: ${{ secrets.VM_SSH_KEY }}
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
           script: |
-            set -ex            RESPONSE=$(curl -s -X POST \
-              -H "Content-Type: application/json" \
-              -d "{\"yandexPassportOauthToken\":\"${{ secrets.YC_OAUTH_TOKEN }}\"}" \
-              "https://iam.api.cloud.yandex.net/iam/v1/tokens")
+            docker login cr.yandex -u json_key -p '${{ secrets.YC_SA_JSON_KEY }}'
+            docker pull cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.version }}_latest
 
-            YC_TOKEN=$(echo "$RESPONSE" | jq -r '.iamToken')
-            echo "$YC_TOKEN" | docker login --username iam --password-stdin ${{ env.REGISTRY }}
+            docker stop shri || true
+            docker rm shri || true
 
-            docker pull ${{ env.REGISTRY }}/${{ env.REPO }}:${{ github.event.inputs.version }}
-            docker stop app || true
-            docker rm app || true
-            docker run -d \
-              --name app \
-              --restart always \
-              -p 80:3000 \
-              -e NODE_ENV=production \
-              ${{ env.REGISTRY }}/${{ env.REPO }}:${{ github.event.inputs.version }}
+            docker run -d --name shri -p 80:3000 cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.version }}_latest
+name: Deploy to VM
 
-            docker system prune -f
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Docker image tag"
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            docker login cr.yandex -u json_key -p '${{ secrets.YC_SA_JSON_KEY }}'
+            docker pull cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.version }}_latest
+
+            docker stop shri || true
+            docker rm shri || true
+
+            docker run -d --name shri -p 80:3000 cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.version }}_latest
