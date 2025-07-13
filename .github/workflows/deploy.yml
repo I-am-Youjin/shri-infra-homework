@@ -10,18 +10,17 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    env:
-      VERSION: ${{ github.event.inputs.version }}
 
     steps:
-      - name: Deploy via SSH
+      - name: SSH deploy
         uses: appleboy/ssh-action@v1.0.0
         with:
-          host: ${{ secrets.REMOTE_HOST }}
-          username: ${{ secrets.REMOTE_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: 22
           script: |
-            docker stop app || true
-            docker rm app || true
-            docker pull cr.yandex/${{ secrets.YANDEX_REGISTRY_ID }}/app:${{ env.VERSION }}_latest
-            docker run -d --name app -p 80:3000 cr.yandex/${{ secrets.YANDEX_REGISTRY_ID }}/app:${{ env.VERSION }}_latest
+            docker pull cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.version }}_latest
+            docker stop shri || true
+            docker rm shri || true
+            docker run -d --name shri -p 80:3000 cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.version }}_latest
