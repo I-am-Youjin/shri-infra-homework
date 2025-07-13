@@ -16,14 +16,16 @@ jobs:
       - name: Verify image exists
         run: |
           echo "${{ secrets.YC_KEY_JSON }}" > key.json
-          yc container image get --name cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.version }}
+          cat key.json | docker login cr.yandex --username json_key --password-stdin
+          docker pull cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.version }} || exit 1
+          rm key.json
 
       - name: Deploy to production
         uses: appleboy/ssh-action@v1
         with:
-          host: ${{ secrets.VM_IP}}
-          username: ${{ secrets.VM_SSH_USER}}
-          key: ${{ secrets.VM_SSH_KEY}}
+          host: ${{ secrets.VM_IP }}
+          username: ${{ secrets.VM_SSH_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
           script: |
             set -e
             echo "${{ secrets.YC_KEY_JSON }}" > key.json
