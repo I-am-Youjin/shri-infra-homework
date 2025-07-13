@@ -17,19 +17,16 @@ jobs:
     environment: production
 
     steps:
-      - name: Install YC CLI
+      - name: Get IAM Token via API
         run: |
-          curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash
-          echo "$HOME/yandex-cloud/bin" >> $GITHUB_PATH
+          RESPONSE=$(curl -s -X POST \
+            -H "Content-Type: application/json" \
+            -d "{\"yandexPassportOauthToken\":\"${{ secrets.YC_OAUTH_TOKEN }}\"}" \
+            "https://iam.api.cloud.yandex.net/iam/v1/tokens")
 
-      - name: Get OAuth Token
-        id: get-token
-        run: |
-          echo "${{ secrets.YC_OAUTH_TOKEN }}" > oauth.txt
-          YC_TOKEN=$(yc iam create-token --oauth-token $(cat oauth.txt))
+          YC_TOKEN=$(echo "$RESPONSE" | jq -r '.iamToken')
           echo "::add-mask::$YC_TOKEN"
           echo "YC_TOKEN=$YC_TOKEN" >> $GITHUB_ENV
-          rm oauth.txt
 
       - name: Login to Container Registry
         run: |
@@ -49,9 +46,12 @@ jobs:
           username: ${{ secrets.VM_SSH_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
-            set -ex
-            echo "${{ secrets.YC_OAUTH_TOKEN }}" > oauth.txt
-            YC_TOKEN=$(yc iam create-token --oauth-token $(cat oauth.txt))
+            set -ex            RESPONSE=$(curl -s -X POST \
+              -H "Content-Type: application/json" \
+              -d "{\"yandexPassportOauthToken\":\"${{ secrets.YC_OAUTH_TOKEN }}\"}" \
+              "https://iam.api.cloud.yandex.net/iam/v1/tokens")
+
+            YC_TOKEN=$(echo "$RESPONSE" | jq -r '.iamToken')
             echo "$YC_TOKEN" | docker login --username iam --password-stdin ${{ env.REGISTRY }}
 
             docker pull ${{ env.REGISTRY }}/${{ env.REPO }}:${{ github.event.inputs.version }}
@@ -64,5 +64,4 @@ jobs:
               -e NODE_ENV=production \
               ${{ env.REGISTRY }}/${{ env.REPO }}:${{ github.event.inputs.version }}
 
-            rm oauth.txt
             docker system prune -f
