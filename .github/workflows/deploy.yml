@@ -20,7 +20,7 @@ jobs:
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
             docker login cr.yandex -u json_key -p '${{ secrets.YC_KEY_JSON }}'
-            docker pull cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.version }}_latest
+            docker pull cr.yandex/${{ secrets.YC_REGISTRY_ID }}/shri-infra:${{ github.event.inputs.version }}
 
             docker stop shri || true
             docker rm shri || true
