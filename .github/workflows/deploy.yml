@@ -26,31 +26,3 @@ jobs:
             docker rm shri || true
 
             docker run -d --name shri -p 80:3000 cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.version }}_latest
-name: Deploy to VM
-
-on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: "Docker image tag"
-        required: true
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
-          script: |
-            docker login cr.yandex -u json_key -p '${{ secrets.YC_SA_JSON_KEY }}'
-            docker pull cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.version }}_latest
-
-            docker stop shri || true
-            docker rm shri || true
-
-            docker run -d --name shri -p 80:3000 cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.version }}_latest
