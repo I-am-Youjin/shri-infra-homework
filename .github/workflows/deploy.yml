@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to deploy'
+        description: "Version to deploy"
         required: true
 
 env:
@@ -41,7 +41,7 @@ jobs:
       - name: Verify image exists
         run: |
           docker pull ${{ env.REGISTRY }}/${{ env.REPO }}:${{ github.event.inputs.version }}
-.
+
       - name: Deploy to VM
         uses: appleboy/ssh-action@v1
         with:
@@ -53,7 +53,7 @@ jobs:
             echo "${{ secrets.YC_OAUTH_TOKEN }}" > oauth.txt
             YC_TOKEN=$(yc iam create-token --oauth-token $(cat oauth.txt))
             echo "$YC_TOKEN" | docker login --username iam --password-stdin ${{ env.REGISTRY }}
-            
+
             docker pull ${{ env.REGISTRY }}/${{ env.REPO }}:${{ github.event.inputs.version }}
             docker stop app || true
             docker rm app || true
@@ -63,6 +63,6 @@ jobs:
               -p 80:3000 \
               -e NODE_ENV=production \
               ${{ env.REGISTRY }}/${{ env.REPO }}:${{ github.event.inputs.version }}
-            
+
             rm oauth.txt
             docker system prune -f
