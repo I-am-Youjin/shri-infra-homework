@@ -15,11 +15,11 @@ jobs:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.0
         with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
+          host: ${{ secrets.VM_IP }}
+          username: ${{ secrets.VM_SSH_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
           script: |
-            docker login cr.yandex -u json_key -p '${{ secrets.YC_SA_JSON_KEY }}'
+            docker login cr.yandex -u json_key -p '${{ secrets.YC_KEY_JSON }}'
             docker pull cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.version }}_latest
 
             docker stop shri || true
