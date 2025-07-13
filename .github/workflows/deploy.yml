@@ -1,48 +1,15 @@
-name: Deploy to VM
-
-on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: "Release version to deploy (e.g. 123)"
-        required: true
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    environment: production
-
-    steps:
-      - name: Verify image exists
-        run: |
-          echo "${{ secrets.YC_KEY_JSON }}" > key.json
-          yc container image get --name cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.version }}
-
-      - name: Deploy to production
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.SERVER_IP }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          script: |
-            set -e
-            echo "${{ secrets.YC_KEY_JSON }}" > key.json
-            cat key.json | docker login cr.yandex --username json_key --password-stdin
-            docker pull cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.version }}
-            docker stop app || true
-            docker rm app || true
-            docker run -d \
-              --name app \
-              --restart always \
-              -p 80:3000 \
-              -e NODE_ENV=production \
-              cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.version }}
-            rm key.json
-            docker system prune -f
-
-      - name: Update deployment status
-        uses: bobheadxi/deployments@v1
-        with:
-          step: finish
-          token: ${{ secrets.GITHUB_TOKEN }}
-          env: production
+- name: Deploy to VM via SSH
+  uses: appleboy/ssh-action@v1.0.0
+  with:
+    host: ${{ secrets.SERVER_IP }}
+    username: ${{ secrets.SERVER_USER }}
+    key: ${{ secrets.SERVER_SSH_KEY }}
+    port: 22
+    script: |
+      echo '${{ secrets.YC_KEY_JSON }}' > key.json
+      cat key.json | docker login cr.yandex --username json_key --password-stdin
+      docker pull cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.version }}_latest
+      docker stop shri || true
+      docker rm shri || true
+      docker run -d --name shri -p 80:3000 cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.version }}_latest
+      rm key.json
