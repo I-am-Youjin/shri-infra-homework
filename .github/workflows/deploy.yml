@@ -1,10 +1,10 @@
-name: Deploy to VM
+name: Deploy to Production VM
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version to deploy (e.g. 123)"
+        description: "Docker image version to deploy (e.g. 123 or 123_fix456)"
         required: true
 
 jobs:
@@ -13,14 +13,21 @@ jobs:
     environment: production
 
     steps:
-      - name: Verify image exists
+      - name: Verify Docker image exists
         run: |
-          echo "${{ secrets.YC_KEY_JSON }}" > key.json
-          cat key.json | docker login cr.yandex --username json_key --password-stdin
-          docker pull cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.version }} || exit 1
-          rm key.json
+          echo '${{ secrets.YC_KEY_JSON }}' > key.json
+          cat key.json | docker login \
+            --username json_key \
+            --password-stdin \
+            cr.yandex
 
-      - name: Deploy to production
+          if ! docker pull cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.version }}; then
+            echo "::error::Image cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.version }} not found!"
+            exit 1
+          fi
+          rm -f key.json
+
+      - name: Deploy to VM
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.VM_IP }}
@@ -28,23 +35,29 @@ jobs:
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
             set -e
-            echo "${{ secrets.YC_KEY_JSON }}" > key.json
-            cat key.json | docker login cr.yandex --username json_key --password-stdin
-            docker pull cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.version }}
+            echo '${{ secrets.YC_KEY_JSON }}' > key.json
+            cat key.json | docker login \
+              --username json_key \
+              --password-stdin \
+              cr.yandex
+
+            echo "Stopping existing container..."
             docker stop app || true
             docker rm app || true
+
+            echo "Pulling new image..."
+            docker pull cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.version }}
+
+            echo "Starting new container..."
             docker run -d \
               --name app \
               --restart always \
               -p 80:3000 \
               -e NODE_ENV=production \
               cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.version }}
-            rm key.json
+
+            echo "Cleaning up..."
+            rm -f key.json
             docker system prune -f
 
-      - name: Update deployment status
-        uses: bobheadxi/deployments@v1
-        with:
-          step: finish
-          token: ${{ secrets.GITHUB_TOKEN }}
-          env: production
+            echo "Deployment completed successfully!"
