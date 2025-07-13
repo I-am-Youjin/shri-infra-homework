@@ -3,23 +3,25 @@ name: Deploy to VM
 on:
   workflow_dispatch:
     inputs:
-      release_version:
-        description: "Version to deploy (e.g. 7_latest)"
+      version:
         required: true
+        description: "Release version"
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ github.event.inputs.version }}
 
     steps:
-      - name: Connect and run Docker on VM
+      - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.0
         with:
-          host: ${{ secrets.VM_IP }}
-          username: ${{ secrets.VM_SSH_USER }}
-          key: ${{ secrets.VM_SSH_KEY }}
+          host: ${{ secrets.REMOTE_HOST }}
+          username: ${{ secrets.REMOTE_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            docker login --username json_key --password-stdin cr.yandex <<< "${{ secrets.YC_KEY_JSON | fromJSON | toString }}"
-            docker pull cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.release_version }}
-            docker stop app || true && docker rm app || true
-            docker run -d -p 80:3000 --name app cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.release_version }}
+            docker stop app || true
+            docker rm app || true
+            docker pull cr.yandex/${{ secrets.YANDEX_REGISTRY_ID }}/app:${{ env.VERSION }}_latest
+            docker run -d --name app -p 80:3000 cr.yandex/${{ secrets.YANDEX_REGISTRY_ID }}/app:${{ env.VERSION }}_latest
