@@ -1,11 +1,15 @@
-name: Deploy to Production VM
+name: Deploy with OAuth
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Docker image version to deploy (e.g. 123 or 123_fix456)"
+        description: 'Version to deploy'
         required: true
+
+env:
+  REGISTRY: cr.yandex
+  REPO: ${{ secrets.YC_REGISTRY_ID }}/app
 
 jobs:
   deploy:
@@ -13,20 +17,31 @@ jobs:
     environment: production
 
     steps:
-      - name: Verify Docker image exists
+      - name: Install YC CLI
         run: |
-          echo '${{ secrets.YC_KEY_JSON }}' > key.json
-          cat key.json | docker login \
-            --username json_key \
+          curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash
+          echo "$HOME/yandex-cloud/bin" >> $GITHUB_PATH
+
+      - name: Get OAuth Token
+        id: get-token
+        run: |
+          echo "${{ secrets.YC_OAUTH_TOKEN }}" > oauth.txt
+          YC_TOKEN=$(yc iam create-token --oauth-token $(cat oauth.txt))
+          echo "::add-mask::$YC_TOKEN"
+          echo "YC_TOKEN=$YC_TOKEN" >> $GITHUB_ENV
+          rm oauth.txt
+
+      - name: Login to Container Registry
+        run: |
+          echo "${{ env.YC_TOKEN }}" | docker login \
+            --username iam \
             --password-stdin \
-            cr.yandex
+            ${{ env.REGISTRY }}
 
-          if ! docker pull cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.version }}; then
-            echo "::error::Image cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.version }} not found!"
-            exit 1
-          fi
-          rm -f key.json
-
+      - name: Verify image exists
+        run: |
+          docker pull ${{ env.REGISTRY }}/${{ env.REPO }}:${{ github.event.inputs.version }}
+.
       - name: Deploy to VM
         uses: appleboy/ssh-action@v1
         with:
@@ -34,30 +49,20 @@ jobs:
           username: ${{ secrets.VM_SSH_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
-            set -e
-            echo '${{ secrets.YC_KEY_JSON }}' > key.json
-            cat key.json | docker login \
-              --username json_key \
-              --password-stdin \
-              cr.yandex
-
-            echo "Stopping existing container..."
+            set -ex
+            echo "${{ secrets.YC_OAUTH_TOKEN }}" > oauth.txt
+            YC_TOKEN=$(yc iam create-token --oauth-token $(cat oauth.txt))
+            echo "$YC_TOKEN" | docker login --username iam --password-stdin ${{ env.REGISTRY }}
+            
+            docker pull ${{ env.REGISTRY }}/${{ env.REPO }}:${{ github.event.inputs.version }}
             docker stop app || true
             docker rm app || true
-
-            echo "Pulling new image..."
-            docker pull cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.version }}
-
-            echo "Starting new container..."
             docker run -d \
               --name app \
               --restart always \
               -p 80:3000 \
               -e NODE_ENV=production \
-              cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.version }}
-
-            echo "Cleaning up..."
-            rm -f key.json
+              ${{ env.REGISTRY }}/${{ env.REPO }}:${{ github.event.inputs.version }}
+            
+            rm oauth.txt
             docker system prune -f
-
-            echo "Deployment completed successfully!"
